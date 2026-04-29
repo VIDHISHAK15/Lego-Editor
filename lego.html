@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lego Builder 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { display: block; outline: none; }
+        
+        /* Custom scrollbar for the tools panel */
+        .tools-panel::-webkit-scrollbar { width: 6px; }
+        .tools-panel::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        
+        .color-btn { transition: transform 0.1s; }
+        .color-btn:active { transform: scale(0.9); }
+        .color-btn.active { ring: 2px solid white; box-shadow: 0 0 0 2px #3b82f6; }
+
+        .brick-btn.active { border-color: #3b82f6; background-color: #eff6ff; }
+        
+        #loading {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #f8fafc; display: flex; flex-direction: column; gap: 1rem; justify-content: center; align-items: center;
+            z-index: 50; font-size: 1.5rem; color: #475569;
+        }
+
+        /* Reference Image Overlay */
+        #ref-image-container {
+            display: none;
+            position: absolute;
+            top: 20px;
+            right: 20px; /* Moved to right corner */
+            width: 200px;
+            z-index: 40;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 8px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            cursor: move;
+            border: 1px solid #e2e8f0;
+        }
+        #ref-image { width: 100%; height: auto; border-radius: 4px; pointer-events: none; }
+        .close-ref { 
+            position: absolute; top: -8px; right: -8px; 
+            background: #ef4444; color: white; border-radius: 50%; 
+            width: 20px; height: 20px; font-size: 12px; line-height: 20px; 
+            text-align: center; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loading">
+        <div>Loading Engine...</div>
+        <div id="error-msg" class="text-sm text-red-500 hidden mt-2 px-4 text-center"></div>
+    </div>
+
+    <!-- Reference Image Overlay -->
+    <div id="ref-image-container" onmousedown="startDragRef(event)">
+        <div class="close-ref" onclick="closeRefImage()">×</div>
+        <div class="text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider text-center select-none">Reference</div>
+        <img id="ref-image" src="" alt="Reference">
+    </div>
+
+    <!-- UI Overlay -->
+    <div class="absolute top-4 left-4 z-10 flex flex-col gap-4 max-h-[90vh]">
+        <!-- Tools Panel -->
+        <div class="bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-xl border border-slate-200 w-64 overflow-y-auto max-h-[60vh] tools-panel">
+            <h1 class="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                Lego Builder
+            </h1>
+
+            <!-- Brick Selection -->
+            <div class="mb-4">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Brick Type</label>
+                <div class="grid grid-cols-3 gap-2 mt-2">
+                    <button onclick="setBrickType('1x1')" id="btn-1x1" class="brick-btn active p-2 border rounded hover:bg-slate-50 flex flex-col items-center justify-center h-16">
+                        <div class="w-4 h-4 bg-blue-500 rounded-sm shadow-sm"></div>
+                        <span class="text-xs mt-1 text-slate-600">1x1</span>
+                    </button>
+                    <button onclick="setBrickType('2x2')" id="btn-2x2" class="brick-btn p-2 border rounded hover:bg-slate-50 flex flex-col items-center justify-center h-16">
+                        <div class="w-6 h-6 bg-blue-500 rounded-sm shadow-sm"></div>
+                        <span class="text-xs mt-1 text-slate-600">2x2</span>
+                    </button>
+                    <button onclick="setBrickType('2x4')" id="btn-2x4" class="brick-btn p-2 border rounded hover:bg-slate-50 flex flex-col items-center justify-center h-16">
+                        <div class="w-8 h-4 bg-blue-500 rounded-sm shadow-sm"></div>
+                        <span class="text-xs mt-1 text-slate-600">2x4</span>
+                    </button>
+                    <button onclick="setBrickType('4x4')" id="btn-4x4" class="brick-btn p-2 border rounded hover:bg-slate-50 flex flex-col items-center justify-center h-16">
+                        <div class="w-8 h-8 bg-blue-500 rounded-sm shadow-sm"></div>
+                        <span class="text-xs mt-1 text-slate-600">4x4</span>
+                    </button>
+                    <button onclick="setBrickType('8x6')" id="btn-8x6" class="brick-btn p-2 border rounded hover:bg-slate-50 flex flex-col items-center justify-center h-16">
+                        <div class="w-10 h-8 bg-blue-500 rounded-sm shadow-sm"></div>
+                        <span class="text-xs mt-1 text-slate-600">8x6</span>
+                    </button>
+                    <button onclick="setBrickType('8x8')" id="btn-8x8" class="brick-btn p-2 border rounded hover:bg-slate-50 flex flex-col items-center justify-center h-16">
+                        <div class="w-10 h-10 bg-blue-500 rounded-sm shadow-sm"></div>
+                        <span class="text-xs mt-1 text-slate-600">8x8</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Colors -->
+            <div class="mb-4">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Color</label>
+                <div class="grid grid-cols-5 gap-2 mt-2" id="color-palette">
+                    <!-- Generated by JS -->
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="space-y-2">
+                <button onclick="rotateBrick()" class="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium text-sm flex items-center justify-center gap-2 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    Rotate (R or Arrows)
+                </button>
+                
+                <div class="flex gap-2">
+                    <!-- Delete Mode -->
+                    <button onclick="toggleDeleteMode()" id="delete-btn" class="flex-1 py-2 px-3 bg-slate-100 hover:bg-red-100 text-slate-700 hover:text-red-700 rounded font-medium text-sm flex items-center justify-center gap-2 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        Delete
+                    </button>
+
+                    <!-- Drag Mode -->
+                    <button onclick="toggleDragMode()" id="drag-btn" class="flex-1 py-2 px-3 bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-700 rounded font-medium text-sm flex items-center justify-center gap-2 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" /></svg>
+                        Drag
+                    </button>
+                </div>
+            </div>
+
+             <!-- Blueprints & References -->
+             <div class="mt-4 border-t border-slate-200 pt-4">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Blueprints & Refs</label>
+                
+                <!-- Upload Image -->
+                <button onclick="document.getElementById('ref-upload').click()" class="w-full py-2 px-3 bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 rounded text-sm flex items-center justify-center gap-2 mb-2 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    Load Reference Image
+                </button>
+                <input type="file" id="ref-upload" accept="image/*" class="hidden" onchange="loadReferenceImage(this)">
+
+                <!-- Pre-made Blueprints -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="loadBlueprint('Pyramid')" class="py-1.5 px-2 bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-700 rounded text-xs font-medium transition">Pyramid</button>
+                    <button onclick="loadBlueprint('Heart')" class="py-1.5 px-2 bg-slate-100 hover:bg-pink-100 text-slate-700 hover:text-pink-700 rounded text-xs font-medium transition">Heart</button>
+                    <button onclick="clearBlueprint()" class="col-span-2 py-1 px-2 bg-slate-50 hover:bg-slate-200 text-slate-500 rounded text-xs transition mt-1">Clear Ghost Blueprint</button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Persistence Panel -->
+        <div class="bg-white/90 backdrop-blur-sm p-4 rounded-xl shadow-xl border border-slate-200 w-64">
+            <div class="flex gap-2">
+                <button onclick="clearScene()" class="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded text-sm font-bold transition">Clear</button>
+                <button onclick="saveScene()" class="flex-1 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-bold shadow-md shadow-blue-200 transition">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Piece Count Display -->
+    <div class="absolute bottom-4 right-4 z-10 bg-white/90 backdrop-blur-sm p-3 rounded-xl shadow-xl border border-slate-200 text-slate-700 font-bold flex items-center gap-2 transition-all hover:scale-105">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+        <span id="piece-count">0 Bricks</span>
+    </div>
+
+    <!-- Help Text -->
+    <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-black/70 backdrop-blur-md text-white px-6 py-3 rounded-full text-sm font-medium pointer-events-none select-none text-center w-max max-w-[90vw]">
+        Left Click: Place • Right Drag: Rotate Cam • Arrows/R: Rotate • 'D': Delete • Drag Icon: Move
+    </div>
+
+    <script>
+        /**
+         * REFERENCE IMAGE LOGIC
+         */
+        function loadReferenceImage(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('ref-image').src = e.target.result;
+                    document.getElementById('ref-image-container').style.display = 'block';
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function closeRefImage() {
+            document.getElementById('ref-image-container').style.display = 'none';
+            document.getElementById('ref-upload').value = '';
+        }
+
+        // Draggable Logic
+        let isDraggingRef = false;
+        let refDragOffset = { x: 0, y: 0 };
+
+        function startDragRef(e) {
+            if(e.target.classList.contains('close-ref')) return;
+            isDraggingRef = true;
+            const el = document.getElementById('ref-image-container');
+            const rect = el.getBoundingClientRect();
+            refDragOffset.x = e.clientX - rect.left;
+            refDragOffset.y = e.clientY - rect.top;
+            window.addEventListener('mousemove', doDragRef);
+            window.addEventListener('mouseup', stopDragRef);
+        }
+
+        function doDragRef(e) {
+            if (!isDraggingRef) return;
+            e.preventDefault();
+            const el = document.getElementById('ref-image-container');
+            el.style.left = (e.clientX - refDragOffset.x) + 'px';
+            el.style.top = (e.clientY - refDragOffset.y) + 'px';
+            el.style.right = 'auto'; // Clear right positioning
+        }
+
+        function stopDragRef() {
+            isDraggingRef = false;
+            window.removeEventListener('mousemove', doDragRef);
+            window.removeEventListener('mouseup', stopDragRef);
+        }
+
+        /**
+         * CONFIGURATION & CONSTANTS
+         */
+        const BRICK_UNIT = 20; 
+        const BRICK_HEIGHT = 24; 
+        const GRID_SIZE = 1000;
+        
+        const COLORS = [
+            '#DC2626', // Red
+            '#2563EB', // Blue
+            '#FBBF24', // Yellow
+            '#16A34A', // Green
+            '#ffffff', // White
+            '#1e293b', // Dark Grey
+            '#94a3b8', // Light Grey
+            '#7C2D12', // Brown
+            '#9333EA', // Purple
+            '#EA580C'  // Orange
+        ];
+
+        const BRICK_DEFS = {
+            '1x1': { w: 1, d: 1 },
+            '2x2': { w: 2, d: 2 },
+            '2x4': { w: 2, d: 4 },
+            '4x4': { w: 4, d: 4 },
+            '8x6': { w: 8, d: 6 },
+            '8x8': { w: 8, d: 8 }
+        };
+
+        /**
+         * STATE
+         */
+        let state = {
+            selectedBrick: '1x1',
+            selectedColor: COLORS[0],
+            rotation: 0, // 0 = 0deg, 1 = 90deg
+            isDeleteMode: false,
+            isDragMode: false,
+            isDragging: false,
+            placedBricks: [] 
+        };
+
+        /**
+         * THREE.JS SETUP
+         */
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#f0f9ff');
+        scene.fog = new THREE.Fog('#f0f9ff', 200, 1000);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
+        camera.position.set(400, 300, 400);
+        camera.lookAt(0, 0, 0);
+
+        let renderer;
+        try {
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+        } catch (e) {
+            try {
+                console.warn("High quality renderer failed, trying low quality...");
+                renderer = new THREE.WebGLRenderer({ antialias: false });
+            } catch (e2) {
+                document.getElementById('error-msg').innerText = "WebGL not supported on this device.";
+                document.getElementById('error-msg').classList.remove('hidden');
+                throw e2;
+            }
+        }
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.1; 
+        controls.minDistance = 50;
+        controls.maxDistance = 1200;
+        // Disable keys on controls so arrow keys don't move camera
+        controls.enableKeys = false;
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(200, 400, 300);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        /**
+         * ENVIRONMENT
+         */
+        const planeGeometry = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
+        planeGeometry.rotateX(-Math.PI / 2);
+        const planeMaterial = new THREE.MeshBasicMaterial({ visible: false }); 
+        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.receiveShadow = true; 
+        plane.name = 'ground';
+        scene.add(plane);
+
+        const gridHelper = new THREE.GridHelper(GRID_SIZE, 50, 0x94a3b8, 0xe2e8f0);
+        scene.add(gridHelper);
+
+        /**
+         * BLUEPRINT LOGIC
+         */
+        let blueprintGroup = new THREE.Group();
+        scene.add(blueprintGroup);
+
+        const PREMADE_BLUEPRINTS = {
+            'Pyramid': generatePyramidBlueprint(),
+            'Heart': generateHeartBlueprint()
+        };
+
+        function generatePyramidBlueprint() {
+            const bricks = [];
+            const colors = ['#FBBF24', '#EA580C', '#DC2626'];
+            for(let y=0; y<5; y++) {
+                const size = 5-y;
+                const start = -((size-1)*20)/2;
+                for(let x=0; x<size; x++) {
+                    for(let z=0; z<size; z++) {
+                        bricks.push({
+                            type: '2x2',
+                            color: colors[y%3],
+                            x: start + x*20 + 10,
+                            y: 12 + y*24,
+                            z: start + z*20 + 10,
+                            rot: 0
+                        });
+                    }
+                }
+            }
+            return bricks;
+        }
+        
+        function generateHeartBlueprint() {
+             return [
+                 {type:'2x2', color:'#DC2626', x:-10, y:12, z:0, rot:0},
+                 {type:'2x2', color:'#DC2626', x:30, y:12, z:0, rot:0},
+                 {type:'2x2', color:'#DC2626', x:-30, y:36, z:0, rot:0},
+                 {type:'2x2', color:'#DC2626', x:10, y:36, z:0, rot:0},
+                 {type:'2x2', color:'#DC2626', x:50, y:36, z:0, rot:0},
+                 {type:'2x2', color:'#DC2626', x:-10, y:60, z:0, rot:0},
+                 {type:'2x2', color:'#DC2626', x:30, y:60, z:0, rot:0},
+                 {type:'2x2', color:'#DC2626', x:10, y:84, z:0, rot:0},
+             ];
+        }
+
+        function loadBlueprint(name) {
+            clearBlueprint();
+            const data = PREMADE_BLUEPRINTS[name];
+            if(data) renderBlueprintFromData(data);
+        }
+
+        function renderBlueprintFromData(data) {
+            clearBlueprint();
+            // Use a special material for ghosts
+            const ghostMat = new THREE.MeshBasicMaterial({ 
+                color: 0x00ffff, 
+                transparent: true, 
+                opacity: 0.3, 
+                wireframe: true 
+            });
+
+            data.forEach(b => {
+                // We reuse the geometry creation logic but override material
+                const def = BRICK_DEFS[b.type] || BRICK_DEFS['2x2'];
+                const width = (b.rot % 2 === 0) ? def.w : def.d;
+                const depth = (b.rot % 2 === 0) ? def.d : def.w;
+                
+                const geo = new THREE.BoxGeometry(width * BRICK_UNIT, BRICK_HEIGHT, depth * BRICK_UNIT);
+                const mesh = new THREE.Mesh(geo, ghostMat);
+                mesh.position.set(b.x, b.y, b.z);
+                blueprintGroup.add(mesh);
+            });
+        }
+
+        function clearBlueprint() {
+            while(blueprintGroup.children.length > 0){ 
+                const obj = blueprintGroup.children[0];
+                obj.geometry.dispose();
+                blueprintGroup.remove(obj); 
+            }
+        }
+
+        /**
+         * BRICK FACTORY
+         */
+        const studGeo = new THREE.CylinderGeometry(6, 6, 4, 16);
+        
+        function createBrickMesh(type, color, isGhost = false) {
+            const def = BRICK_DEFS[type];
+            const width = (state.rotation % 2 === 0) ? def.w : def.d;
+            const depth = (state.rotation % 2 === 0) ? def.d : def.w;
+
+            const geometry = new THREE.BoxGeometry(width * BRICK_UNIT, BRICK_HEIGHT, depth * BRICK_UNIT);
+
+            const material = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: 0.1,
+                metalness: 0.0,
+                transparent: isGhost,
+                opacity: isGhost ? 0.5 : 1.0
+            });
+
+            const brick = new THREE.Mesh(geometry, material);
+            brick.castShadow = !isGhost;
+            brick.receiveShadow = !isGhost;
+
+            const startX = -((width * BRICK_UNIT) / 2) + (BRICK_UNIT / 2);
+            const startZ = -((depth * BRICK_UNIT) / 2) + (BRICK_UNIT / 2);
+
+            for (let i = 0; i < width; i++) {
+                for (let j = 0; j < depth; j++) {
+                    const stud = new THREE.Mesh(studGeo, material);
+                    stud.position.x = startX + (i * BRICK_UNIT);
+                    stud.position.z = startZ + (j * BRICK_UNIT);
+                    stud.position.y = (BRICK_HEIGHT / 2) + 2; 
+                    stud.castShadow = !isGhost;
+                    stud.receiveShadow = !isGhost;
+                    brick.add(stud);
+                }
+            }
+
+            brick.userData = { type: type, w: width, d: depth, isBrick: true };
+            return brick;
+        }
+
+        /**
+         * INTERACTION LOGIC
+         */
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        let ghostBrick = null;
+        let objectsToIntersect = [plane]; 
+
+        function updateGhostBrick() {
+            if (ghostBrick) scene.remove(ghostBrick);
+            if (state.isDeleteMode) return;
+            // In drag mode, only show ghost if actively dragging
+            if (state.isDragMode && !state.isDragging) return;
+
+            ghostBrick = createBrickMesh(state.selectedBrick, state.selectedColor, true);
+            scene.add(ghostBrick);
+        }
+        updateGhostBrick();
+
+        window.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('pointerdown', onPointerDown);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('resize', onWindowResize);
+
+        function onPointerMove(event) {
+            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            if (state.isDeleteMode) {
+                handleDeletePreview();
+            } else if (state.isDragMode) {
+                if (state.isDragging) {
+                    handlePlacementPreview(); // Dragging uses placement logic
+                } else {
+                    handleDeletePreview(); // Hover effect to show what can be grabbed (reusing delete preview style)
+                }
+            } else {
+                handlePlacementPreview();
+            }
+        }
+
+        function handleDeletePreview() {
+            // Reusing delete preview for "hover to grab" in Drag mode
+            if(ghostBrick) ghostBrick.visible = false;
+            
+            raycaster.setFromCamera(pointer, camera);
+            const intersects = raycaster.intersectObjects(objectsToIntersect, false);
+            
+            // Reset colors
+            objectsToIntersect.forEach(obj => {
+                if(obj.name !== 'ground' && obj.material && obj.userData.originalHex) {
+                    obj.material.color.setHex(obj.userData.originalHex);
+                }
+            });
+
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                let target = hit;
+                while(target.parent && target.parent.type !== 'Scene') target = target.parent;
+                
+                if (target.name !== 'ground') {
+                    if(!target.userData.originalHex) target.userData.originalHex = target.material.color.getHex();
+                    
+                    if (state.isDeleteMode) {
+                         target.material.color.setHex(0xff0000); // Red for delete
+                         document.body.style.cursor = 'pointer';
+                    } else if (state.isDragMode && !state.isDragging) {
+                         target.material.color.setHex(0xfcd34d); // Amber for grab available
+                         document.body.style.cursor = 'grab';
+                    }
+                } else {
+                    document.body.style.cursor = 'default';
+                }
+            }
+        }
+
+        function handlePlacementPreview() {
+            if (!ghostBrick) return;
+            ghostBrick.visible = false; 
+            
+            raycaster.setFromCamera(pointer, camera);
+            const interactables = objectsToIntersect.filter(obj => obj !== ghostBrick);
+            const intersects = raycaster.intersectObjects(interactables, true); 
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                let targetObject = intersect.object;
+                while(targetObject.parent && targetObject.parent.type !== 'Scene') targetObject = targetObject.parent;
+                const normal = intersect.face.normal;
+                const position = new THREE.Vector3().copy(intersect.point);
+
+                position.add(normal.clone().multiplyScalar(2)); 
+                position.x = Math.floor(position.x / BRICK_UNIT) * BRICK_UNIT + (BRICK_UNIT / 2);
+                position.z = Math.floor(position.z / BRICK_UNIT) * BRICK_UNIT + (BRICK_UNIT / 2);
+                
+                if (targetObject.name === 'ground') position.y = BRICK_HEIGHT / 2;
+                else {
+                    if (Math.abs(normal.y) > 0.9) position.y = targetObject.position.y + BRICK_HEIGHT;
+                    else position.y = targetObject.position.y;
+                }
+                
+                if (ghostBrick.userData.w % 2 === 0) position.x += (BRICK_UNIT / 2);
+                if (ghostBrick.userData.d % 2 === 0) position.z += (BRICK_UNIT / 2);
+
+                ghostBrick.position.copy(position);
+                ghostBrick.visible = true;
+                
+                if(state.isDragMode && state.isDragging) document.body.style.cursor = 'grabbing';
+                else document.body.style.cursor = 'pointer';
+
+            } else document.body.style.cursor = 'default';
+        }
+
+        let clickStartTime = 0;
+        
+        function onPointerDown(event) {
+            if (event.target.tagName !== 'CANVAS') return;
+            clickStartTime = Date.now();
+
+            if (state.isDragMode && event.button === 0) {
+                // Try to pick up
+                raycaster.setFromCamera(pointer, camera);
+                const intersects = raycaster.intersectObjects(objectsToIntersect, true);
+                
+                if (intersects.length > 0) {
+                    let target = intersects[0].object;
+                    while(target.parent && target.parent.type !== 'Scene') target = target.parent;
+                    
+                    if (target.name !== 'ground') {
+                        // Found brick to drag
+                        state.isDragging = true;
+                        
+                        // Get data from stored state for accuracy
+                        const brickData = state.placedBricks.find(b => b.id === target.uuid);
+                        if (brickData) {
+                            state.selectedBrick = brickData.type;
+                            state.selectedColor = brickData.color;
+                            state.rotation = brickData.rot;
+                        }
+                        
+                        // Remove original
+                        scene.remove(target);
+                        objectsToIntersect = objectsToIntersect.filter(obj => obj !== target);
+                        state.placedBricks = state.placedBricks.filter(b => b.id !== target.uuid);
+                        
+                        // Create ghost immediately
+                        updateGhostBrick();
+                        handlePlacementPreview();
+                        document.body.style.cursor = 'grabbing';
+                    }
+                }
+            }
+        }
+
+        function onPointerUp(event) {
+            if (event.target.tagName !== 'CANVAS') return;
+            
+            // If dragging, release it
+            if (state.isDragMode && state.isDragging) {
+                if (event.button === 0) {
+                    placeBrick();
+                    state.isDragging = false;
+                    document.body.style.cursor = 'grab';
+                    if (ghostBrick) ghostBrick.visible = false; // Hide ghost after drop in drag mode
+                }
+                return;
+            }
+
+            // Normal Click placement
+            if (Date.now() - clickStartTime < 250) {
+                if (event.button !== 0) return; 
+                
+                if (state.isDeleteMode) deleteBrick();
+                else if (!state.isDragMode) placeBrick();
+            }
+        }
+
+        function placeBrick() {
+            if (!ghostBrick || !ghostBrick.visible) return;
+            const newBrick = createBrickMesh(state.selectedBrick, state.selectedColor, false);
+            newBrick.position.copy(ghostBrick.position);
+            newBrick.rotation.copy(ghostBrick.rotation);
+            scene.add(newBrick);
+            objectsToIntersect.push(newBrick);
+            
+            // Pop effect
+            newBrick.scale.set(0.1, 0.1, 0.1);
+            animatePlacement(newBrick);
+            
+            state.placedBricks.push({
+                id: newBrick.uuid,
+                type: state.selectedBrick,
+                color: state.selectedColor,
+                x: newBrick.position.x,
+                y: newBrick.position.y,
+                z: newBrick.position.z,
+                rot: state.rotation
+            });
+            
+            updatePieceCount();
+        }
+
+        function deleteBrick() {
+            raycaster.setFromCamera(pointer, camera);
+            const intersects = raycaster.intersectObjects(objectsToIntersect, true);
+            if (intersects.length > 0) {
+                let target = intersects[0].object;
+                while(target.parent && target.parent.type !== 'Scene') target = target.parent;
+                if (target.name !== 'ground') {
+                    scene.remove(target);
+                    objectsToIntersect = objectsToIntersect.filter(obj => obj !== target);
+                    state.placedBricks = state.placedBricks.filter(b => b.id !== target.uuid);
+                    if(target.geometry) target.geometry.dispose();
+                    if(target.material) target.material.dispose();
+                    updatePieceCount();
+                }
+            }
+        }
+
+        function onKeyDown(event) {
+            const key = event.key.toLowerCase();
+            if (key === 'r') rotateBrick();
+            if (key === 'd') toggleDeleteMode();
+            
+            // Fix: Prevent default scrolling/camera move for arrows
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                event.preventDefault();
+                rotateBrick();
+            }
+        }
+
+        /**
+         * UI FUNCTIONS
+         */
+        function initUI() {
+            const palette = document.getElementById('color-palette');
+            COLORS.forEach(color => {
+                const btn = document.createElement('button');
+                btn.className = `color-btn w-8 h-8 rounded-full shadow-sm border border-slate-200 ${color === state.selectedColor ? 'active' : ''}`;
+                btn.style.backgroundColor = color;
+                btn.onclick = () => setColor(color, btn);
+                palette.appendChild(btn);
+            });
+            document.getElementById('btn-1x1').classList.add('active');
+            document.getElementById('loading').style.display = 'none';
+            updatePieceCount();
+        }
+
+        function updatePieceCount() {
+            const count = state.placedBricks.length;
+            const label = count === 1 ? 'Brick' : 'Bricks';
+            const el = document.getElementById('piece-count');
+            if (el) el.innerText = `${count} ${label}`;
+        }
+
+        function setBrickType(type) {
+            state.selectedBrick = type;
+            document.querySelectorAll('.brick-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`btn-${type}`).classList.add('active');
+            
+            // In drag mode, changing brick type updates the currently dragged item or the ghost
+            if (!state.isDeleteMode && !state.isDragMode) updateGhostBrick();
+            else if (state.isDragMode && state.isDragging) {
+                // Allow changing brick type while dragging
+                updateGhostBrick();
+            }
+        }
+
+        function setColor(color, btnElement) {
+            state.selectedColor = color;
+            document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+            
+            if (!state.isDeleteMode && !state.isDragMode) updateGhostBrick();
+            else if (state.isDragMode && state.isDragging) {
+                // Allow changing color while dragging
+                updateGhostBrick();
+            }
+        }
+
+        function rotateBrick() {
+            state.rotation = (state.rotation + 1) % 2; 
+            updateGhostBrick();
+        }
+
+        function toggleDeleteMode() {
+            if (state.isDragMode) toggleDragMode(); // Turn off drag first
+
+            state.isDeleteMode = !state.isDeleteMode;
+            const btn = document.getElementById('delete-btn');
+            
+            if (state.isDeleteMode) {
+                btn.classList.add('bg-red-100', 'text-red-700', 'border-red-300');
+                btn.classList.remove('bg-slate-100', 'text-slate-700');
+                if (ghostBrick) scene.remove(ghostBrick);
+            } else {
+                btn.classList.remove('bg-red-100', 'text-red-700', 'border-red-300');
+                btn.classList.add('bg-slate-100', 'text-slate-700');
+                updateGhostBrick();
+            }
+        }
+
+        function toggleDragMode() {
+            if (state.isDeleteMode) toggleDeleteMode(); // Turn off delete first
+
+            state.isDragMode = !state.isDragMode;
+            state.isDragging = false;
+            const btn = document.getElementById('drag-btn');
+
+            if (state.isDragMode) {
+                btn.classList.add('bg-amber-100', 'text-amber-700', 'border-amber-300');
+                btn.classList.remove('bg-slate-100', 'text-slate-700');
+                if (ghostBrick) ghostBrick.visible = false; // Hide default ghost
+                document.body.style.cursor = 'grab';
+            } else {
+                btn.classList.remove('bg-amber-100', 'text-amber-700', 'border-amber-300');
+                btn.classList.add('bg-slate-100', 'text-slate-700');
+                document.body.style.cursor = 'default';
+                updateGhostBrick();
+            }
+        }
+
+        function clearScene() {
+            if(!confirm('Clear entire scene?')) return;
+            objectsToIntersect.forEach(obj => {
+                if (obj.name !== 'ground') scene.remove(obj);
+            });
+            objectsToIntersect = [plane];
+            state.placedBricks = [];
+            updatePieceCount();
+        }
+
+        function saveScene() {
+            localStorage.setItem('lego-scene', JSON.stringify(state.placedBricks));
+            const btn = document.querySelector('button[onclick="saveScene()"]');
+            const originalText = btn.innerText;
+            btn.innerText = 'Saved!';
+            setTimeout(() => btn.innerText = originalText, 1000);
+        }
+
+        function loadScene() {
+            const data = localStorage.getItem('lego-scene');
+            if (!data) return;
+            const bricks = JSON.parse(data);
+            bricks.forEach(b => {
+                const tempRot = state.rotation;
+                state.rotation = b.rot;
+                const mesh = createBrickMesh(b.type, b.color, false);
+                mesh.position.set(b.x, b.y, b.z);
+                scene.add(mesh);
+                objectsToIntersect.push(mesh);
+                state.rotation = tempRot;
+            });
+            state.placedBricks = bricks;
+            updatePieceCount();
+        }
+
+        function animatePlacement(mesh) {
+            let scale = 0.1;
+            const interval = setInterval(() => {
+                scale += 0.15;
+                if (scale >= 1) {
+                    scale = 1;
+                    clearInterval(interval);
+                }
+                mesh.scale.set(scale, scale, scale);
+            }, 16);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        initUI();
+        animate();
+        loadScene(); 
+
+    </script>
+</body>
+</html>
