@@ -99,7 +99,7 @@ const colors = {
  
 MIT License - see [LICENSE](LICENSE) file
     
-## 👨‍💻 Author **VIDHISHAK15** - [@VIDHISHAK15](https://github.com/VIDHISHAK15) 
+👨‍💻 Author **VIDHISHAK15** - [@VIDHISHAK15](https://github.com/VIDHISHAK15) 
 ## 🙏 Credits 
 - Three.js - 3D library 
 - Tailwind CSS - Styling 
