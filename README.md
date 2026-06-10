@@ -100,7 +100,8 @@ const colors = {
 MIT License - see [LICENSE](LICENSE) file
     
 👨‍💻 Author **VIDHISHAK15** - [@VIDHISHAK15](https://github.com/VIDHISHAK15) 
-## 🙏 Credits 
+
+## Credits 
 - Three.js - 3D library 
 - Tailwind CSS - Styling 
 - LEGO - Inspiration and design philosophy
