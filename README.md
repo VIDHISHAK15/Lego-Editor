@@ -5,7 +5,7 @@
 <img width="400" height="212" alt="Screen Recording 2026-04-29 at 9 14 32 PM" src="https://github.com/user-attachments/assets/c307baa8-94b7-4464-8574-0261c6808da7" /> 
 
 
---- 
+
 
 ## ✨ Features 
 - **Place & Build** - Click to place multiple brick types (1x1, 2x2, 2x4, etc.) 
@@ -31,7 +31,7 @@
    ```bash git clone https://github.com/VIDHISHAK15/Lego-Editor.git cd Lego-Editor ``` 
    2. **Open in browser** - Simply open `lego.html` in your web browser - Or serve locally using a simple HTTP server: ```bash # Python 3 python -m http.server 8000 # Node.js (http-server) npx http-server # PHP php -S localhost:8000 ``` 
    3. **Access the application** - Navigate to `http://localhost:8000/lego.html` - Start building! 
---- 
+
 
 ## 🎮 Usage
  
